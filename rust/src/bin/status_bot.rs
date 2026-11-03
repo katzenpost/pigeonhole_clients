@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Keypair::load_or_generate(&*backend, &args.data_dir, "status").await?,
         args.data_dir.join("state"),
     );
-    cfg.display_name = "Status".into();
+    cfg.display_name = "Eliza".into();
     cfg.advertise = !args.no_advertise;
     cfg.poll_interval = Duration::try_from_secs_f64(args.poll_interval)
         .map_err(|e| format!("--poll_interval: {e}"))?;
