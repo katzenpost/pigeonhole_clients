@@ -1724,6 +1724,7 @@ dependencies = [
  "hpqc",
  "indexmap",
  "katzenpost_thin_client",
+ "libc",
  "log",
  "memsec",
  "pyo3",

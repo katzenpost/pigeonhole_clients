@@ -14,7 +14,7 @@ use std::task::{Context, Poll, Waker};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::UdpSocket;
-use tokio::sync::oneshot;
+use tokio::sync::{Notify, oneshot};
 
 use super::stream::{self, Link, Tuning};
 use crate::transport::{Backend, Result};
@@ -36,15 +36,31 @@ pub struct Tunnel {
     peer: Mutex<Option<SocketAddr>>,
     fixed: bool,
     q: Mutex<Queue>,
+    /// The last datagram from the link.
+    last: Mutex<Vec<u8>>,
+    /// Notified as datagrams come from the socket, and as they go to it from the link.
+    pub from_socket: Notify,
+    pub to_socket: Notify,
 }
 
 impl Tunnel {
     pub fn new(sock: UdpSocket, peer: Option<SocketAddr>) -> Tunnel {
-        Tunnel { sock, fixed: peer.is_some(), peer: Mutex::new(peer), q: Mutex::default() }
+        Tunnel { sock, fixed: peer.is_some(), peer: Mutex::new(peer), q: Mutex::default(), last: Mutex::default(), from_socket: Notify::new(), to_socket: Notify::new() }
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.sock.local_addr()
+    }
+
+    pub fn peer(&self) -> Option<SocketAddr> {
+        *self.peer.lock().unwrap()
+    }
+
+    /// Sends the last datagram from the link to the peer again.
+    pub fn redeliver(&self) {
+        if let Some(p) = self.peer() {
+            let _ = self.sock.try_send_to(&self.last.lock().unwrap(), p);
+        }
     }
 
     /// Queues a record for the peer, dropping the oldest waiting if there are [`QUEUE`].
@@ -93,6 +109,7 @@ impl Tunnel {
                         *self.peer.lock().unwrap() = Some(from);
                     }
                     self.push(buf[..n].to_vec());
+                    self.from_socket.notify_one();
                 }
                 Err(e) => {
                     log::warn!("udp: {e}");
@@ -151,8 +168,12 @@ impl AsyncWrite for Writer<'_> {
                 let _ = tap.send(rec.to_vec());
             } else if let (false, Some(p)) = (rec.is_empty(), *me.t.peer.lock().unwrap()) {
                 // A full socket buffer loses the datagram, as the network would.
-                if let Err(e) = me.t.sock.try_send_to(rec, p) {
-                    log::debug!("udp: {e}");
+                match me.t.sock.try_send_to(rec, p) {
+                    Ok(_) => {
+                        *me.t.last.lock().unwrap() = rec.to_vec();
+                        me.t.to_socket.notify_one()
+                    }
+                    Err(e) => log::debug!("udp: {e}"),
                 }
             }
             at = end;

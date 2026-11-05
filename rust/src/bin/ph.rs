@@ -131,8 +131,62 @@ async fn closing<R>(tun: &Tunnel, run: impl Future<Output = R>) -> R {
     }
 }
 
-/// Starts a mosh-server on localhost: its port and its `MOSH CONNECT PORT KEY` line.
-async fn mosh_server() -> Result<(u16, String), String> {
+/// Holds the mosh-server at `pid` stopped until the client's first datagram reaches it: it gives
+/// up on a client silent for 60 s, well under a round trip of boxes, and it reads the waiting
+/// datagram before it checks the time once continued.
+async fn hold(tun: &Tunnel, pid: u32) {
+    // SAFETY: kill(2) on a pid of ours.
+    unsafe { libc::kill(pid as i32, libc::SIGSTOP) };
+    tun.to_socket.notified().await;
+    unsafe { libc::kill(pid as i32, libc::SIGCONT) };
+}
+
+/// Runs mosh-client over `tun`. It gives up on a server silent for 15 s, so a first one only
+/// sends the server its first datagram, and the one kept starts once the server's reply is here
+/// and is handed that reply.
+async fn mosh_client(tun: &Tunnel, key: &str) {
+    let port = tun.local_addr().unwrap().port().to_string();
+    let mosh = || tokio::process::Command::new("mosh-client").env("MOSH_KEY", key).args(["127.0.0.1", &port]).spawn();
+    // SAFETY: termios of stdin, restored as the first mosh-client is killed in raw mode.
+    let mut tty: libc::termios = unsafe { std::mem::zeroed() };
+    let tty = (unsafe { libc::tcgetattr(0, &mut tty) } == 0).then_some(tty);
+    let mut first = match mosh() {
+        Ok(c) => c,
+        Err(e) => return eprintln!("ph: mosh-client: {e}"),
+    };
+    tokio::select! {
+        _ = first.wait() => return,
+        _ = tun.from_socket.notified() => {}
+    }
+    let _ = first.kill().await;
+    if let Some(t) = tty {
+        unsafe { libc::tcsetattr(0, libc::TCSANOW, &t) };
+    }
+    eprint!("\r\nph: waiting for the mosh-server's reply\r\n");
+    tokio::select! {
+        _ = tun.to_socket.notified() => {}
+        _ = tokio::signal::ctrl_c() => return,
+    }
+    let old = tun.peer();
+    let mut c = match mosh() {
+        Ok(c) => c,
+        Err(e) => return eprintln!("ph: mosh-client: {e}"),
+    };
+    let hello = async {
+        while tun.peer() == old {
+            tun.from_socket.notified().await;
+        }
+        tun.redeliver();
+        std::future::pending::<()>().await
+    };
+    tokio::select! {
+        _ = c.wait() => {}
+        _ = hello => {}
+    }
+}
+
+/// Starts a mosh-server on localhost: its pid, port and `MOSH CONNECT PORT KEY` line.
+async fn mosh_server() -> Result<(u32, u16, String), String> {
     let o = tokio::process::Command::new("mosh-server")
         .args(["new", "-i", "127.0.0.1"])
         .stdin(std::process::Stdio::null())
@@ -142,7 +196,9 @@ async fn mosh_server() -> Result<(u16, String), String> {
     let out = String::from_utf8_lossy(&o.stdout);
     let line = out.lines().find(|l| l.starts_with("MOSH CONNECT ")).ok_or_else(|| String::from_utf8_lossy(&o.stderr).trim().to_string())?;
     let port = line.split(' ').nth(2).and_then(|p| p.parse().ok()).ok_or("mosh-server: no port")?;
-    Ok((port, line.to_string()))
+    let err = String::from_utf8_lossy(&o.stderr);
+    let pid = err.split("[mosh-server detached, pid = ").nth(1).and_then(|r| r.split(']').next()?.parse().ok()).ok_or("mosh-server: no pid")?;
+    Ok((pid, port, line.to_string()))
 }
 
 async fn go<B: Backend>(b: Arc<B>, cmd: Cmd, t: Tuning) {
@@ -215,13 +271,7 @@ async fn go<B: Backend>(b: Arc<B>, cmd: Cmd, t: Tuning) {
                     _ = tokio::signal::ctrl_c() => String::new(),
                 };
                 match line.strip_prefix("MOSH CONNECT ").and_then(|r| r.split(' ').nth(1)) {
-                    Some(key) => {
-                        let port = tun.local_addr().unwrap().port().to_string();
-                        let st = tokio::process::Command::new("mosh-client").env("MOSH_KEY", key.trim()).args(["127.0.0.1", &port]).status().await;
-                        if let Err(e) = st {
-                            eprintln!("ph: mosh-client: {e}");
-                        }
-                    }
+                    Some(key) => mosh_client(&tun, key.trim()).await,
                     None if !line.is_empty() => eprintln!("ph: {line}"),
                     None => {}
                 }
@@ -238,21 +288,34 @@ async fn go<B: Backend>(b: Arc<B>, cmd: Cmd, t: Tuning) {
                 let first = stream::accept(&*b, &l, &t).await.unwrap_or_else(|e| fail(e));
                 eprintln!("ph: session, starting a mosh-server");
                 let sock = bind("127.0.0.1:0").await;
-                let tun = match mosh_server().await {
-                    Ok((port, line)) => {
+                let (tun, pid) = match mosh_server().await {
+                    Ok((pid, port, line)) => {
                         let tun = Tunnel::new(sock, Some(([127, 0, 0, 1], port).into()));
                         tun.push(line.into_bytes());
-                        tun
+                        (tun, Some(pid))
                     }
                     Err(e) => {
                         eprintln!("ph: {e}");
                         let tun = Tunnel::new(sock, None);
                         tun.push(e.into_bytes());
                         tun.close();
-                        tun
+                        (tun, None)
                     }
                 };
-                let r = tun.run(b.clone(), &mut l, &t, Some(first), None).await;
+                let held = async {
+                    match pid {
+                        Some(pid) => hold(&tun, pid).await,
+                        None => std::future::pending().await,
+                    }
+                };
+                let r = {
+                    let run = tun.run(b.clone(), &mut l, &t, Some(first), None);
+                    tokio::pin!(run);
+                    tokio::select! {
+                        r = &mut run => r,
+                        _ = held => run.await,
+                    }
+                };
                 save(&state, &l);
                 r.unwrap_or_else(|e| fail(e));
                 eprintln!("ph: session ended");
