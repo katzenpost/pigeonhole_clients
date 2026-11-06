@@ -81,6 +81,17 @@ the payload changes with the size: box IDs (32 bytes) and signatures (64) stay t
 `testdata/box_sizes.json` (from `scripts/gen_box_sizes.py`) holds these numbers, substreams cut to
 each size, and one sealed stream whose boxes are of mixed sizes. Python, Rust and Go all read it.
 
+## Push on the mesh
+
+On Reticulum the katzenqt1 clients wait for a box instead of polling for it, when the replica
+announces push (flag bit 4 of `pigeonhole_rns`, whose README gives the wire format under Push). A
+read that finds no box subscribes to it on the open Link (mode 2 op 6), and the replica pushes the
+box down that Link once it is written; the client then reads it from what was pushed, with no
+query. A stream waiting for a push still reads again every 5 minutes (`PUSHED_POLL_MS`), in case
+the push was lost, which also renews the subscription. Against a replica that does not announce
+push, and on the mixnet, the client polls as before. Both mesh transports do this (Python
+`MeshBackend.watch`, Rust `Backend::watch`); applications need no change.
+
 ## Reticulum from Rust
 
 The `reticulum-py` cargo feature adds `transport::reticulum_py::ReticulumPyBackend`, which puts
@@ -134,6 +145,45 @@ The scp times include the session setup. On the local replica, most of the setup
 waiting for the replica's announce (every 10 s there). That evening the bridge took about 10 s
 to answer a query, whichever client sent it; earlier in the day it took 0.15 s. On the mixnet
 the sshd needs `LoginGraceTime 0`, because setup takes longer than its 120 s default.
+
+### Datagrams, and mosh
+
+`ph udp` carries UDP datagrams over a link (`protocols::datagram`). Each datagram travels as a
+record, a 2-byte length then the datagram, and the stream batches records into boxes. When the
+link falls behind, at most 8 datagrams wait, and the oldest are dropped first. `ph mosh` runs
+[mosh](https://mosh.org) over it. Mosh copes with loss and shows what you type at once (local
+echo), so typing does not wait for a round trip of boxes.
+
+```
+ph udp --to 127.0.0.1:PORT server.json        # on the server, a session at a time
+ph udp --listen 127.0.0.1:PORT client.json    # on the client, until interrupted
+ph mosh --serve server.json                   # on the server
+ph mosh client.json                           # on the client
+```
+
+For each session, `ph mosh --serve` starts `mosh-server new -i 127.0.0.1` and sends its key back
+over the link. The client then runs `mosh-client` against its end of the tunnel. No SSH is
+involved, so **holding the client end of the link is enough to get a shell** on the server.
+Hand out the link code accordingly.
+
+mosh through `ph mosh`, measured on 2026-11-05 (mosh 1.4.0, the default prediction mode):
+
+| | Reticulum, local replica | Reticulum, namenlos bridge | namenlos mixnet |
+|---|---|---|---|
+| launch to a shell prompt | 7.7-11.5 s | 23-132 s | 449 s |
+| a keystroke shows (local echo) | 0.002-0.29 s | 0.002-0.013 s | 0.01-0.02 s |
+| one keystroke per line, which mosh does not predict | none slower | 12-23 s | 49 min |
+| `echo word` output appears | 0.37-0.58 s | 28-32 s | not within 70 min |
+
+In each line, mosh waits until the server has confirmed one prediction before it echoes keys
+locally, so one key per line waits for a round trip. On the mixnet, mosh
+sends datagrams faster than boxes are carried, so they queue and are dropped, and round trips
+take minutes. Mosh suits the local replica and the bridge, but not the mixnet.
+
+mosh-client gives up after 15 s without a reply, and mosh-server after 60 s without a client.
+Over a slow link, `ph mosh` keeps the server stopped until the client's first datagram reaches
+it. The first mosh-client only sends that datagram. A second one starts once the server's reply
+has arrived, and it is handed that reply.
 
 ## Testing
 
