@@ -1051,7 +1051,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "highctidh"
 version = "0.1.0"
-source = "git+https://github.com/katzenpost/highctidh-rs?rev=4686e46273d959e59d33736206ed2dbce7f82e57#4686e46273d959e59d33736206ed2dbce7f82e57"
+source = "git+https://github.com/katzenpost/highctidh-rs?rev=45d0ac2a5c7271626e762e2c9fe1d0e442a3fbb8#45d0ac2a5c7271626e762e2c9fe1d0e442a3fbb8"
 dependencies = [
  "cc",
  "rand_core 0.10.1",
@@ -1080,7 +1080,7 @@ dependencies = [
 [[package]]
 name = "hpqc"
 version = "0.1.0"
-source = "git+https://github.com/katzenpost/hpqc?rev=4732d7fb7e6328407f69a5cea0dfb5e9eca308f7#4732d7fb7e6328407f69a5cea0dfb5e9eca308f7"
+source = "git+https://github.com/katzenpost/hpqc?rev=0593c80f32f09eb17fbeb02bf0b84b3286524663#0593c80f32f09eb17fbeb02bf0b84b3286524663"
 dependencies = [
  "aes-gcm-siv",
  "blake2b_simd",
@@ -1091,6 +1091,7 @@ dependencies = [
  "highctidh",
  "ml-dsa",
  "ml-kem",
+ "once_cell",
  "pq-mceliece",
  "rand_core 0.10.1",
  "sha2 0.11.1",
@@ -2800,7 +2801,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

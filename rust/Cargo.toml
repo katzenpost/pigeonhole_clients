@@ -56,8 +56,8 @@ reticulum-link = { git = "https://git.emcomm.cc/berlinmesh/reticulum", rev = "66
 reticulum-msgpack = { git = "https://git.emcomm.cc/berlinmesh/reticulum", rev = "6669dc5d220e647510701599ed0292d4abd38715", optional = true }
 reticulum-packet = { git = "https://git.emcomm.cc/berlinmesh/reticulum", rev = "6669dc5d220e647510701599ed0292d4abd38715", optional = true }
 reticulum-router = { git = "https://git.emcomm.cc/berlinmesh/reticulum", rev = "6669dc5d220e647510701599ed0292d4abd38715", optional = true }
-# BACAP in Rust, CTIDH via highctidh-rs.
-hpqc = { git = "https://github.com/katzenpost/hpqc", rev = "4732d7fb7e6328407f69a5cea0dfb5e9eca308f7", optional = true }
+# BACAP in Rust, CTIDH via highctidh-rs; pinned to unmerged hpqc#159 (no_std), which pins highctidh-rs#2.
+hpqc = { git = "https://github.com/katzenpost/hpqc", rev = "0593c80f32f09eb17fbeb02bf0b84b3286524663", optional = true }
 getrandom = { version = "0.4", features = ["sys_rng"], optional = true }
 pyo3 = { version = "0.30", features = ["auto-initialize"], optional = true }
 
