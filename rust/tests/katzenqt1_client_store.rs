@@ -1,5 +1,7 @@
 //! The store's files.
 
+#![cfg(feature = "std")]
+
 use pigeonhole_protocols::protocols::katzenqt1::client::store::{Options, Store};
 use pigeonhole_protocols::protocols::katzenqt1::engine::{FileWrite, State, StepResult};
 

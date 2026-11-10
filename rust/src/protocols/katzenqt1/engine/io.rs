@@ -1,7 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use crate::prelude::*;
+use alloc::collections::{BTreeMap, BTreeSet};
 
 use crate::protocols::katzenqt1::member::{Index, Key};
-use crate::transport::{Inducted, Keypair, Minted, Opened, Secret};
+use crate::protocols::katzenqt1::boxes::{Inducted, Keypair, Minted, Opened};
+use crate::secret::Secret;
 
 use crate::protocols::katzenqt1::engine::ChatId;
 
