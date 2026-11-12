@@ -1030,7 +1030,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "highctidh"
 version = "0.1.0"
-source = "git+https://github.com/katzenpost/highctidh-rs?rev=45d0ac2a5c7271626e762e2c9fe1d0e442a3fbb8#45d0ac2a5c7271626e762e2c9fe1d0e442a3fbb8"
+source = "git+https://github.com/katzenpost/highctidh-rs?rev=feae6de91536f345f55afbf33122b6f43b060378#feae6de91536f345f55afbf33122b6f43b060378"
 dependencies = [
  "cc",
  "rand_core 0.10.1",
@@ -1059,7 +1059,7 @@ dependencies = [
 [[package]]
 name = "hpqc"
 version = "0.1.0"
-source = "git+https://github.com/katzenpost/hpqc?rev=0593c80f32f09eb17fbeb02bf0b84b3286524663#0593c80f32f09eb17fbeb02bf0b84b3286524663"
+source = "git+https://github.com/katzenpost/hpqc?rev=78696ceb9c7ebdb2b431b9c9a282c0db312518f2#78696ceb9c7ebdb2b431b9c9a282c0db312518f2"
 dependencies = [
  "aes-gcm-siv",
  "blake2b_simd",
