@@ -27,6 +27,13 @@ cd go && go run ./examples/chat -name alice -state alice -sim ../pigeonhole.sock
 mixnet. The [Pigeonhole Protocols How-to Guide](https://katzenpost.network/docs/pigeonhole_protocols_howto/)
 builds something new with the library.
 
+## What is here
+
+[`go/`](go) is the Go module, [`rust/`](rust) the `pigeonhole_protocols` crate and
+[`py/`](py/README.md) the Python package; [code layout](docs/layout.md) maps their packages.
+[`examples/`](examples/README.md) walks through the chat example, [`testdata/`](testdata) holds
+the shared test vectors with their sources, and [`docs/`](docs) the tool pages and design notes.
+
 ## Tools
 
 Each runs through a Katzenpost client daemon.
@@ -43,8 +50,9 @@ Each runs through a Katzenpost client daemon.
 
 katzenqt1 is katzenqt's group chat ([design](https://katzenpost.network/docs/specs/groupchat/),
 [contact voucher](https://katzenpost.network/docs/specs/contactvoucher/),
-[over Reticulum](https://katzenpost.network/docs/specs/katzenqt1-reticulum/)). The clients write
-wire version 5 and read 3 to 5; they share a group with katzenqt. The service framework speaks
+[over Reticulum](https://katzenpost.network/docs/specs/katzenqt1-reticulum/)). The Go and Rust
+clients write wire version 5 and the Python client 4 unless told otherwise; all read 3 to 5, and
+they share a group with katzenqt. The service framework speaks
 [Pigeonhole services](https://katzenpost.network/docs/specs/pigeonhole_services/), as katzenpost's
 voucher router and service directory do. The Go, Rust and Python implementations check against
 the vectors in [`testdata/katzenqt1`](testdata/katzenqt1), and the Go member's traces replay in
@@ -56,8 +64,10 @@ How it works: [code layout](docs/layout.md), [box sizes](docs/box-sizes.md),
 
 ## Testing and contributing
 
-`make test rust-test py-test` runs the unit tests; [docs/testing.md](docs/testing.md) covers
-conformance, the localnet interop suite and the end to end runs. Issues and pull requests are
+`make test rust-test py-test` runs the tests; `py-test` wants `pip install -e "py[test]"` first.
+`make test` also builds a localnet for the interop suite, which takes minutes;
+`cd go && go test -short ./...` leaves it out. [docs/testing.md](docs/testing.md) covers
+conformance, the interop suite and the end to end runs. Issues and pull requests are
 welcome on GitHub.
 
 ## Licence
