@@ -27,6 +27,12 @@ pub fn backoff(n: usize) -> u64 {
     60000u64.min(2000 << n.min(5))
 }
 
+/// How long to wait, in milliseconds, before waiting again for a voucher's reply, after `n`
+/// failures before: 5 seconds, doubling to 5 minutes 20.
+pub fn reply_backoff(n: usize) -> u64 {
+    5000u64 << n.min(6)
+}
+
 /// How a voucher is handed to a member of the group.
 pub fn voucher_code(voucher: &[u8]) -> String {
     STANDARD.encode(voucher)
@@ -601,6 +607,26 @@ impl Cx<'_> {
         }
     }
 
+    /// Wait for the reply to each voucher minted to join, that is not waited for yet. A voucher's
+    /// wait is keyed by its box 1, as a stream's read is by its key.
+    fn start_join(&mut self, c: &Chat) {
+        let Some(j) = c.joining.as_ref().filter(|j| !j.code.is_empty()) else {
+            return;
+        };
+        for v in j.vouchers() {
+            if self.flight.reading.insert((c.id.clone(), v.box1.clone())) {
+                self.emit(Action::AwaitReply {
+                    chat: c.id.clone(),
+                    secret_key: v.secret_key.clone(),
+                    voucher_read_cap: v.voucher_read_cap.clone(),
+                    box1: v.box1.clone(),
+                    write_cap: c.write_cap.clone(),
+                    version: v.version,
+                });
+            }
+        }
+    }
+
     fn start_write(&mut self, c: &mut Chat) {
         if self.flight.writing.contains(&c.id) || c.write_cap.is_empty() || c.jobs.is_empty() {
             return;
@@ -1018,6 +1044,7 @@ fn chat_of(i: &Input) -> Option<&ChatId> {
         | SealedReply { chat, .. }
         | Published { chat }
         | Failed { chat, .. }
+        | ReplyFailed { chat, .. }
         | Loaded { chat, .. }
         | Substream { chat, .. }
         | WroteChunk { chat, .. }
@@ -1058,6 +1085,7 @@ impl Engine {
             cx.start_uploads(c);
             cx.start_downloads(c);
             cx.start_receipt(c);
+            cx.start_join(c);
         }
     }
 
@@ -1072,6 +1100,7 @@ impl Engine {
     /// Begin again after a restart: whatever was under way is started afresh.
     pub fn resume(&mut self, now: i64) -> StepResult {
         let mut out = StepResult::default();
+        self.flight = Flight::default();
         for c in &mut self.state.chats {
             let id = c.id.clone();
             if c.write_cap.is_empty() {
@@ -1081,23 +1110,13 @@ impl Engine {
                 });
                 continue;
             }
-            if let Some(j) = &c.joining {
-                out.actions.push(if j.code.is_empty() {
-                    Action::Mint {
-                        chat: id.clone(),
-                        write_cap: c.write_cap.clone(),
-                        name: self.state.me.clone(),
-                        form: voucher_form(self.wire_version),
-                    }
-                } else {
-                    Action::AwaitReply {
-                        chat: id.clone(),
-                        secret_key: j.secret_key.clone(),
-                        voucher_read_cap: j.voucher_read_cap.clone(),
-                        box1: j.box1.clone(),
-                        write_cap: c.write_cap.clone(),
-                        version: j.version,
-                    }
+            // A voucher minted is waited for again by the pump.
+            if c.joining.as_ref().is_some_and(|j| j.code.is_empty()) {
+                out.actions.push(Action::Mint {
+                    chat: id.clone(),
+                    write_cap: c.write_cap.clone(),
+                    name: self.state.me.clone(),
+                    form: voucher_form(self.wire_version),
                 });
             }
             if let Some(i) = &mut c.inducting {
@@ -1309,20 +1328,21 @@ impl Engine {
             }
             Input::Minted { minted, box1, .. } => {
                 let code = voucher_code(&minted.voucher);
-                cx.emit(Action::AwaitReply {
-                    chat: id,
-                    secret_key: minted.secret_key.clone(),
-                    voucher_read_cap: minted.read_cap.clone(),
-                    box1: box1.clone(),
-                    write_cap: c.write_cap.clone(),
-                    version: minted.version,
-                });
+                // A voucher minted before this one may already be in a member's hands: its reply
+                // is still awaited.
+                let mut earlier = Vec::new();
+                if let Some(mut j) = c.joining.take().filter(|j| !j.code.is_empty()) {
+                    earlier = core::mem::take(&mut j.earlier);
+                    earlier.push(j);
+                    earlier.drain(..earlier.len().saturating_sub(EARLIER_VOUCHERS));
+                }
                 c.joining = Some(Joining {
                     code: code.clone(),
                     secret_key: minted.secret_key,
                     voucher_read_cap: minted.read_cap,
                     box1,
                     version: minted.version,
+                    earlier,
                 });
                 let file = voucher_file(&c.name);
                 cx.keep(file.clone(), format!("{code}\n").into_bytes());
@@ -1656,6 +1676,26 @@ impl Engine {
                 let Some(g) = &mut c.group else { return };
                 let es = g.handle(Event::IndexesDerived { stream, indexes });
                 cx.effects(c, es);
+            }
+            Input::ReplyFailed { box1, what, .. } => {
+                if !c
+                    .joining
+                    .as_ref()
+                    .is_some_and(|j| j.vouchers().any(|v| v.box1 == box1))
+                {
+                    return;
+                }
+                // The wait stays out until the wake, which starts it again; said only the first
+                // time, as it may fail the same way for long.
+                let n = cx.missed(c, &box1);
+                if n == 0 {
+                    cx.notice(c, NoticeKind::ActionFailed, &[&what]);
+                }
+                cx.emit(Action::Wake {
+                    chat: id,
+                    stream: box1,
+                    ms: reply_backoff(n),
+                });
             }
             Input::Failed { what, .. } => {
                 // A chat still joining stays so, and joins on when resumed.

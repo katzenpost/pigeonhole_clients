@@ -147,6 +147,12 @@ pub enum Input {
         chat: ChatId,
         what: String,
     },
+    /// Waiting for the reply to the voucher whose box 1 is `box1` failed; it is waited for again.
+    ReplyFailed {
+        chat: ChatId,
+        box1: Index,
+        what: String,
+    },
     /// An upload's message read back from its file, or `None` when it is lost.
     Loaded {
         chat: ChatId,
