@@ -1,4 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use crate::prelude::*;
+use crate::collections::{HashMap, HashSet};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
@@ -6,7 +7,7 @@ use crate::protocols::katzenqt1::member::{
     Effect, Event, Group, Index, Key, Outgoing, Payload, ReadResult, Retention,
 };
 use crate::protocols::katzenqt1::wire as wire;
-use crate::transport::Secret;
+use crate::secret::Secret;
 use wire::{Chunk, FileUpload, MAX_FILE};
 
 use crate::protocols::katzenqt1::engine::io::{Action, FileWrite, Input, Outcome, StepResult};
@@ -458,7 +459,7 @@ impl Cx<'_> {
     /// Keep the lines `keep` holds of, and delete the files the others carry.
     fn drop_lines(&mut self, c: &mut Chat, keep: impl Fn(&Line) -> bool) {
         let before = c.log.len();
-        let log = std::mem::take(&mut c.log);
+        let log = core::mem::take(&mut c.log);
         for l in log {
             if keep(&l) {
                 c.log.push(l);
@@ -650,7 +651,7 @@ impl Cx<'_> {
         });
         let payload = i.payload.clone().unwrap();
         // A joiner that minted the map form of the voucher reads only the map form of the reply.
-        let who_reply = if crate::transport::voucher_version(&payload) == 1 {
+        let who_reply = if crate::protocols::katzenqt1::boxes::voucher_version(&payload) == 1 {
             who.to_map_bytes()
         } else {
             who.to_bytes()
@@ -971,7 +972,7 @@ impl Cx<'_> {
 }
 
 /// The group a reply to our voucher puts us in.
-fn joined_from(o: &crate::transport::Opened) -> Option<(Group, wire::ReplyWho)> {
+fn joined_from(o: &crate::protocols::katzenqt1::boxes::Opened) -> Option<(Group, wire::ReplyWho)> {
     let who = wire::ReplyWho::from_bytes(&o.who_reply)?;
     if o.mutated_write_cap.len() < wire::KEY_SIZE {
         return None;
@@ -1205,7 +1206,7 @@ impl Engine {
                     cx.notice(c, NoticeKind::NameTaken, &[to]);
                     return;
                 }
-                let old = std::mem::replace(&mut c.name, to.clone());
+                let old = core::mem::replace(&mut c.name, to.clone());
                 cx.notice(c, NoticeKind::Renamed, &[&old]);
                 return;
             }
@@ -1422,7 +1423,7 @@ impl Engine {
                 // so it is the box at the index the reply names.
                 if let Some(g) = &mut c.group {
                     let o = g.introduce_now(&sanitize(&inducted.name), &inducted.mutated_read_cap);
-                    let waiting = std::mem::take(&mut c.jobs);
+                    let waiting = core::mem::take(&mut c.jobs);
                     cx.enqueue(c, vec![o], None, None, None);
                     c.jobs.extend(waiting);
                     cx.dirty(c);
@@ -1683,7 +1684,7 @@ mod voucher_code_tests {
         let grouped: Vec<&str> = code
             .as_bytes()
             .chunks(8)
-            .map(|c| std::str::from_utf8(c).unwrap())
+            .map(|c| core::str::from_utf8(c).unwrap())
             .collect();
         assert_eq!(parse_voucher_code(&grouped.join(" ")), Some(vec![7; 32]));
         assert_eq!(parse_voucher_code(&voucher_code(&[7; 16])), None);

@@ -1668,6 +1668,7 @@ dependencies = [
  "env_logger",
  "falcon-rs",
  "getrandom 0.4.3",
+ "hashbrown 0.16.1",
  "hex",
  "hkdf",
  "hpqc",
