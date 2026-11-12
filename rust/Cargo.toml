@@ -17,8 +17,8 @@ include = ["/src/**"]
 # The sans-io katzenqt1 core needs only alloc; without the std feature it builds no_std, with
 # hashbrown's maps for std's.
 hashbrown = { version = "0.16", default-features = false, features = ["default-hasher"] }
-# katzenpost/thin_client#100: the daemon's NIKE and sealed box requests.
-katzenpost_thin_client = { git = "https://github.com/katzenpost/thin_client", rev = "98ff985ad348156eccbe7d3f4c4849a47041f2d3", optional = true }
+# katzenpost/thin_client main: without the persistent API and so without SQLite (#105), with the voucher form (#106).
+katzenpost_thin_client = { git = "https://github.com/katzenpost/thin_client", rev = "bf75ce90be11b4eff9b34970e2caec348310cd2c", optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 blake2 = { version = "0.10", default-features = false }
 chacha20poly1305 = { version = "0.10", optional = true }
