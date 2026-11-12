@@ -24,6 +24,9 @@ on disk. Every step's changes are saved, synced, before any of the work it asks 
   channel through the client daemon, like scp: `genkey` prints a channel's caps, `send` writes a
   file (through the courier's copy command, or a box at a time with `--no-copy`), and `receive`
   reads it into a directory.
+- `go/cmd/kp-fa` (katzenpost finite audio): broadcasts Ogg/Opus from stdin into a new Pigeonhole
+  stream and prints its read capability; a listener with that capability tunes in live or from the
+  start and gets the original bytes back until the stream's end box.
 
 - `pigeonservice`: the service frameworks, in Rust (`rust/src/pigeonservice`) and in Go (`go/pigeonservice`), wire
   compatible with each other and with katzenpost's voucher router and service directory plugins,
@@ -37,7 +40,8 @@ on disk. Every step's changes are saved, synced, before any of the work it asks 
 - `clients`: dialling services; `go/clients/motd` and `go/cmd/motd` fetch the message of the day.
 - `services/interop`: the services, the router and the directory against a real client daemon,
   couriers and replicas, with katzenpost's localnet or a running mixnet (`THIN_CONFIG`);
-  `STATUS_BOT_BIN` adds the Rust status bot, and `PIGEONHOLE_CP_BIN` pigeonhole-cp.
+  `STATUS_BOT_BIN` adds the Rust status bot, and `PIGEONHOLE_CP_BIN` pigeonhole-cp; kp-fa
+  broadcasts its test clip and tunes in to it.
   `zulip-bridge`, which bridges a group with a Zulip stream (`rust/src/bin/zulip_bridge.rs`, with
   the `zulip` cargo feature; `rust/src/services/zulip/README.md` says how to run it and join);
   `motd`, the message of the day service in Go (`go/services/motd`, `go/cmd/motd-service`);
